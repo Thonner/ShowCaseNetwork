@@ -312,3 +312,91 @@ Accuacy of 200 test with 2000 training 0.665
 to 0 DiehlAndCookNodes train 2000 scalled by 1000 then converted to all LIF acc: 0.43 loss of 10%
 ## trained scaled DiehlAndCookNetwork
 200 test accuacy: 0.765
+
+### converted to LIF 
+
+``` python
+def toLIF(network : Network):
+    new_network = Network(dt=1, learning=True)
+    input_layer = Input(
+        n=network.X.n, shape=network.X.shape, traces=True, tc_trace=network.X.tc_trace.item()
+    )
+    exc_layer = LIFNodes(
+        n=network.Ae.n,
+        traces=True,
+        rest=network.Ai.rest.item(),
+        reset=network.Ai.reset.item(),
+        thresh=network.Ai.thresh.item(),
+        refrac=network.Ai.refrac.item(),
+        tc_decay=network.Ai.tc_decay.item(),
+    )
+    inh_layer = LIFNodes(
+        n=network.Ai.n,
+        traces=False,
+        rest=network.Ai.rest.item(),
+        reset=network.Ai.reset.item(),
+        thresh=network.Ai.thresh.item(),
+        tc_decay=network.Ai.tc_decay.item(),
+        refrac=network.Ai.refrac.item(),
+    )
+
+    # Connections
+    w = network.X_to_Ae.w
+    input_exc_conn = Connection(
+        source=input_layer,
+        target=exc_layer,
+        w=w,
+        update_rule=PostPre,
+        nu=network.X_to_Ae.nu,
+        reduction=network.X_to_Ae.reduction,
+        wmin=network.X_to_Ae.wmin,
+        wmax=network.X_to_Ae.wmax,
+        norm=network.X_to_Ae.norm,
+    )
+    w = network.Ae_to_Ai.w
+    exc_inh_conn = Connection(
+        source=exc_layer, target=inh_layer, w=w, wmin=network.Ae_to_Ai.wmin, wmax=network.Ae_to_Ai.wmax
+    )
+    w = network.Ai_to_Ae.w
+    
+    inh_exc_conn = Connection(
+        source=inh_layer, target=exc_layer, w=w, wmin=network.Ai_to_Ae.wmin, wmax=network.Ai_to_Ae.wmax
+    )
+
+    # Add to network
+    new_network.add_layer(input_layer, name="X")
+    new_network.add_layer(exc_layer, name="Ae")
+    new_network.add_layer(inh_layer, name="Ai")
+    new_network.add_connection(input_exc_conn, source="X", target="Ae")
+    new_network.add_connection(exc_inh_conn, source="Ae", target="Ai")
+    new_network.add_connection(inh_exc_conn, source="Ai", target="Ae")
+
+    exc_voltage_monitor = Monitor(new_network.layers["Ae"], ["v"], time=500)
+    inh_voltage_monitor = Monitor(new_network.layers["Ai"], ["v"], time=500)
+    new_network.add_monitor(exc_voltage_monitor, name="exc_voltage")
+    new_network.add_monitor(inh_voltage_monitor, name="inh_voltage")
+
+    spikes = {}
+    for layer in set(network.layers):
+        spikes[layer] = Monitor(new_network.layers[layer], state_vars=["s"], time=time)
+        new_network.add_monitor(spikes[layer], name="%s_spikes" % layer)
+
+    return new_network
+```
+Gives accuacy 0.62 loss of 13%   
+- norm scales:
+0.9 : 0.575  
+0.95 : 0.58  
+1.05 : 0.62   
+1.1 : 0.63  
+1.2 : 0.645
+1.5 : 0.665
+2.0 : 0.665
+2.4 : 0.68
+2.45 : 0.634 long
+2.5 : 0.7 0.634 long
+2.55 : 0.621
+2.6 : 0.665
+3.0 : 0.64
+4.0 : 0.685
+5.0 : 0.655

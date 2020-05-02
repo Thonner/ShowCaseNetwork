@@ -179,7 +179,7 @@ def toLIF(network : Network):
         reduction=network.X_to_Ae.reduction,
         wmin=network.X_to_Ae.wmin,
         wmax=network.X_to_Ae.wmax,
-        norm=network.X_to_Ae.norm * 1.05,
+        norm=network.X_to_Ae.norm * 1,
     )
     w = network.Ae_to_Ai.w
     exc_inh_conn = Connection(
@@ -211,6 +211,12 @@ def toLIF(network : Network):
 
     return new_network
 
+def averageTrans(x):
+    out = torch.zeros(1,14,14)
+    for i in range(14):
+        for j in range(14):
+            out[0,i,j] = ((x[1, i*2, j*2] + x[1, i*2+1, j*2] +x[1, i*2, j*2+1] + x[1, i*2+1, j*2+1])/4)
+    return out
 
 
 parser = argparse.ArgumentParser()
@@ -270,14 +276,14 @@ per_class = int(n_neurons / 10)
 
 # Build Diehl & Cook 2015 network.
 network = ShowCaseNet(
-    n_inpt=784,
+    n_inpt=784//4,
     n_neurons=n_neurons,
     exc=exc,
     inh=inh,
     dt=dt,
     norm=78.4*1000,
     nu=[0, 1e-2],
-    inpt_shape=(1, 28, 28),
+    inpt_shape=(1, 14, 14),
 )
 
 # Voltage recording for excitatory and inhibitory layers.
@@ -293,7 +299,7 @@ dataset = MNIST(
     root=os.path.join("..", "..", "data", "MNIST"),
     download=True,
     transform=transforms.Compose(
-        [transforms.ToTensor(), transforms.Lambda(lambda x: x * intensity)]
+        [transforms.Resize(size=(14,14)), transforms.ToTensor(), transforms.Lambda(lambda x: x * intensity)]
     ),
 )
 
@@ -357,11 +363,11 @@ if run_only:
     hit = 0
     pbar = tqdm(enumerate(dataloader))
     for (i, datum) in pbar:
-        if i > 200:
+        if i > 500:
             break
         image = datum["encoded_image"]
         label = datum["label"]
-        inputs = {"X": image.view(time, 1, 1, 28, 28)}
+        inputs = {"X": image.view(time, 1, 1, 14, 14)}
         network_old.run(inputs=inputs, time=time)
 
         out_spikes = network_old.monitors["Ae_spikes"].get("s")
@@ -379,7 +385,7 @@ if run_only:
         print(class_spike)
         # print(out_spikes)
     
-    acc = hit/200
+    acc = hit/500
     print("\n accuacy: " + str(acc) +"\n")
 else:
     # Train the network.
@@ -407,10 +413,10 @@ else:
         if i % update_interval == 0 and i > 0:
             input_exc_weights = network.connections[("X", "Ae")].w
             w_arg = 0.0
-            for i in range(784):
+            for i in range(784//4):
                 for j in range(n_neurons):
                     w_arg += input_exc_weights[i, j]
-            print(w_arg/(784*n_neurons))
+            print(w_arg/((784//4)*n_neurons))
             # Get network predictions.
             all_activity_pred = all_activity(spike_record, assignments, 10)
             proportion_pred = proportion_weighting(
@@ -447,7 +453,7 @@ else:
         # Run the network on the input.
         choice = np.random.choice(int(n_neurons / 10), size=n_clamp, replace=False)
         clamp = {"Ae": per_class * label.long() + torch.Tensor(choice).long()}
-        inputs = {"X": image.view(time, 1, 1, 28, 28)}
+        inputs = {"X": image.view(time, 1, 1, 14, 14)}
         network.run(inputs=inputs, time=time, clamp=clamp)
 
         # Get voltage recording.
@@ -469,17 +475,17 @@ else:
 
         # Optionally plot various simulation information.
         if plot:
-            inpt = inputs["X"].view(time, 784).sum(0).view(28, 28)
+            inpt = inputs["X"].view(time, 784//4).sum(0).view(14, 14)
             input_exc_weights = network.connections[("X", "Ae")].w
             square_weights = get_square_weights(
-                input_exc_weights.view(784, n_neurons), n_sqrt, 28
+                input_exc_weights.view((784//4), n_neurons), n_sqrt, 14
             )
             
             square_assignments = get_square_assignments(assignments, n_sqrt)
             voltages = {"Ae": exc_voltages, "Ai": inh_voltages}
 
             inpt_axes, inpt_ims = plot_input(
-                image.sum(1).view(28, 28), inpt, label=label, axes=inpt_axes, ims=inpt_ims
+                image.sum(1).view(14, 14), inpt, label=label, axes=inpt_axes, ims=inpt_ims
             )
             spike_ims, spike_axes = plot_spikes(
                 {layer: spikes[layer].get("s").view(time, 1, -1) for layer in spikes},
