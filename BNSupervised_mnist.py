@@ -221,12 +221,12 @@ def averageTrans(x):
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--seed", type=int, default=1)
-parser.add_argument("--n_neurons", type=int, default=100)
+parser.add_argument("--n_neurons", type=int, default=200)
 parser.add_argument("--n_train", type=int, default=5000)
 parser.add_argument("--n_test", type=int, default=10000)
 parser.add_argument("--n_clamp", type=int, default=1)
-parser.add_argument("--exc", type=float, default=22.5*1000)
-parser.add_argument("--inh", type=float, default=22.5*1000)
+parser.add_argument("--exc", type=float, default=22.5)
+parser.add_argument("--inh", type=float, default=22.5)
 parser.add_argument("--time", type=int, default=500)
 parser.add_argument("--dt", type=int, default=1.0)
 parser.add_argument("--intensity", type=float, default=128)
@@ -259,7 +259,7 @@ plot = args.plot
 gpu = args.gpu
 run_only = args.run_only
 
-if gpu:
+'''if gpu:
     torch.set_default_tensor_type("torch.cuda.FloatTensor")
     torch.cuda.manual_seed_all(seed)
 else:
@@ -267,7 +267,7 @@ else:
 
 if not train:
     update_interval = n_test
-
+'''
 n_sqrt = int(np.ceil(np.sqrt(n_neurons)))
 start_intensity = intensity
 per_class = int(n_neurons / 10)
@@ -275,13 +275,13 @@ per_class = int(n_neurons / 10)
 
 
 # Build Diehl & Cook 2015 network.
-network = ShowCaseNet(
+network = DiehlAndCook2015(
     n_inpt=784//4,
     n_neurons=n_neurons,
     exc=exc,
     inh=inh,
     dt=dt,
-    norm=78.4*1000,
+    norm=78.4,
     nu=[0, 1e-2],
     inpt_shape=(1, 14, 14),
 )
@@ -335,7 +335,8 @@ mod = False
 
 if run_only:
     network_old = pickle.load(open("ShowCaseNetwork.p", "rb"))
-    network_old = toLIF(network_old)
+    network_old.learning = False
+    #network_old = toLIF(network_old)
     if mod:
         network_old.Ae.thresh *= 1000
         network_old.Ae.learning = False
@@ -376,7 +377,7 @@ if run_only:
             for j in range(n_neurons):
                 #print(out_spikes[i,0,j])
                 if out_spikes[i,0,j]:
-                    class_spike[j//10] += 1
+                    class_spike[j//(n_neurons//10)] += 1
         
         aVal, maxInd = class_spike.max(0)
         if maxInd == label[0]:
